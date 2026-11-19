@@ -41,6 +41,30 @@ try:
 except Exception as e:
     print('version step skipped:', e)
 
+# sign with the app's permanent key (same key every build = updates install over the old app)
+if os.path.exists('retro.keystore'):
+    shutil.copy('retro.keystore', 'android/app/retro.keystore')
+    gradle = 'android/app/build.gradle'
+    g = open(gradle, encoding='utf-8').read()
+    cfg = '''
+    signingConfigs {
+        debug {
+            storeFile file('retro.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+'''
+    if 'retro.keystore' not in g:
+        g = g.replace('android {', 'android {' + cfg, 1)
+    if 'signingConfig signingConfigs.debug' not in g:
+        g = re.sub(r'(buildTypes\s*\{)', r'\1\n        debug {\n            signingConfig signingConfigs.debug\n        }', g, count=1)
+    open(gradle, 'w', encoding='utf-8').write(g)
+    print('signing config added')
+else:
+    print('no retro.keystore - using a random debug key')
+
 # launcher icons
 try:
     from PIL import Image

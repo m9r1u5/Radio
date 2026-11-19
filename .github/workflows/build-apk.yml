@@ -38,6 +38,17 @@ jobs:
             sed -i 's#<script src="app.js"></script>#<script src="capacitor.js"></script>\n<script src="app.js"></script>#' www/index.html
           fi
 
+      - name: Use the app's permanent signing key (so updates install over the old app)
+        env:
+          KEY: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          if [ -n "$KEY" ]; then
+            echo "$KEY" | base64 -d > retro.keystore
+            echo "Using the permanent signing key"
+          else
+            echo "::warning::Secret ANDROID_DEBUG_KEYSTORE is not set - this APK gets a random key and will not install over the old app"
+          fi
+
       - name: Create Android project
         run: |
           npx cap add android
@@ -45,24 +56,13 @@ jobs:
           python3 native/patch.py
           npx cap sync android
 
-      - name: Use the app's permanent signing key (so updates install over the old app)
-        env:
-          KEY: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
-        run: |
-          mkdir -p ~/.android
-          if [ -n "$KEY" ]; then
-            echo "$KEY" | base64 -d > ~/.android/debug.keystore
-            echo "Using the permanent signing key"
-          else
-            echo "::warning::Secret ANDROID_DEBUG_KEYSTORE is not set - this APK gets a random key and will not install over the old app"
-          fi
-
       - name: Build debug APK
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../RetroRadio.apk
+          echo "APK signed by:" && keytool -printcert -jarfile ../RetroRadio.apk | grep -E "Owner|SHA256:" | head -2
 
       - uses: actions/upload-artifact@v4
         with:
