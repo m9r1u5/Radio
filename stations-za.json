@@ -1,0 +1,32 @@
+{
+  "_readme": "Curated South African stations. Edit freely. 'freq' is the main FM frequency (MHz) used for the dial and for search. 'url' is optional: leave it empty and the app finds the stream on Radio Browser by name/aliases. Entries with \"verify\": true have a frequency or province I am not fully sure of - check and correct them.",
+  "stations": [
+    { "name": "947", "aliases": ["94.7", "947 joburg", "highveld"], "province": "Gauteng", "freq": 94.7, "url": "" },
+    { "name": "Kaya 959", "aliases": ["kaya fm", "kaya", "95.9"], "province": "Gauteng", "freq": 95.9, "url": "" },
+    { "name": "Jacaranda FM", "aliases": ["jacaranda", "jaca", "94.2"], "province": "Gauteng", "freq": 94.2, "url": "" },
+    { "name": "Radio 702", "aliases": ["702", "talk radio 702", "92.7"], "province": "Gauteng", "freq": 92.7, "url": "" },
+    { "name": "Metro FM", "aliases": ["metro", "metrofm"], "province": "National", "freq": 96.4, "url": "" },
+    { "name": "5FM", "aliases": ["5 fm", "five fm"], "province": "National", "freq": 98.0, "url": "" },
+    { "name": "Radio 2000", "aliases": ["r2k", "radio2000"], "province": "National", "freq": 97.2, "url": "", "verify": true },
+    { "name": "SAfm", "aliases": ["sa fm", "safm"], "province": "National", "freq": 104.4, "url": "", "verify": true },
+    { "name": "RSG", "aliases": ["radio sonder grense", "radiosondergrense"], "province": "National", "freq": 100.5, "url": "", "verify": true },
+    { "name": "East Coast Radio", "aliases": ["ecr", "eastcoastradio", "east coast", "94.5"], "province": "KwaZulu-Natal", "freq": 94.5, "url": "" },
+    { "name": "Gagasi FM", "aliases": ["gagasi", "gagasi 99.5", "99.5"], "province": "KwaZulu-Natal", "freq": 99.5, "url": "" },
+    { "name": "Ukhozi FM", "aliases": ["ukhozi", "90.8"], "province": "KwaZulu-Natal", "freq": 90.8, "url": "", "verify": true },
+    { "name": "Lotus FM", "aliases": ["lotus"], "province": "KwaZulu-Natal", "freq": 87.9, "url": "", "verify": true },
+    { "name": "KFM 94.5", "aliases": ["kfm", "k fm"], "province": "Western Cape", "freq": 94.5, "url": "" },
+    { "name": "Heart FM", "aliases": ["heart 104.9", "heart", "104.9"], "province": "Western Cape", "freq": 104.9, "url": "" },
+    { "name": "Smile 90.4FM", "aliases": ["smile fm", "smile", "90.4"], "province": "Western Cape", "freq": 90.4, "url": "" },
+    { "name": "CapeTalk", "aliases": ["cape talk", "567", "capetalk 567"], "province": "Western Cape", "freq": null, "url": "", "band": "AM 567" },
+    { "name": "Good Hope FM", "aliases": ["goodhope", "good hope"], "province": "Western Cape", "freq": 94.9, "url": "", "verify": true },
+    { "name": "Algoa FM", "aliases": ["algoa"], "province": "Eastern Cape", "freq": 94.9, "url": "", "verify": true },
+    { "name": "Umhlobo Wenene FM", "aliases": ["umhlobo wenene", "umhlobo"], "province": "Eastern Cape", "freq": 91.5, "url": "", "verify": true },
+    { "name": "Tru FM", "aliases": ["trufm", "tru"], "province": "Eastern Cape", "freq": 96.0, "url": "", "verify": true },
+    { "name": "OFM", "aliases": ["o fm", "ofm 94-97"], "province": "Free State", "freq": 94.9, "url": "", "verify": true },
+    { "name": "Lesedi FM", "aliases": ["lesedi"], "province": "Free State", "freq": 90.7, "url": "", "verify": true },
+    { "name": "Thobela FM", "aliases": ["thobela"], "province": "Limpopo", "freq": 88.6, "url": "", "verify": true },
+    { "name": "Capricorn FM", "aliases": ["capricorn", "capfm"], "province": "Limpopo", "freq": 98.4, "url": "", "verify": true },
+    { "name": "Ligwalagwala FM", "aliases": ["ligwalagwala"], "province": "Mpumalanga", "freq": 100.0, "url": "", "verify": true },
+    { "name": "Motsweding FM", "aliases": ["motsweding"], "province": "North West", "freq": 89.9, "url": "", "verify": true }
+  ]
+}
