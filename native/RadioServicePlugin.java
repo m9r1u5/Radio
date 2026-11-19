@@ -47,6 +47,23 @@ public class RadioServicePlugin extends Plugin {
         call.resolve();
     }
 
+    /** Reads the song title the station is broadcasting right now (ICY StreamTitle). */
+    @PluginMethod
+    public void nowPlaying(PluginCall call) {
+        final String url = call.getString("url");
+        if (url == null || url.isEmpty()) { call.reject("No stream URL"); return; }
+        new Thread(() -> {
+            try {
+                String t = IcyReader.read(url);
+                JSObject r = new JSObject();
+                r.put("title", t == null ? "" : t);
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject("Could not read song info: " + e.getMessage());
+            }
+        }).start();
+    }
+
     static void stopPressed() {
         if (instance != null) instance.notifyListeners("stopPressed", new JSObject());
     }

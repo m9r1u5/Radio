@@ -8,6 +8,8 @@ World radio stations on an old-school analog radio. Inspired by Radio Garden.
 - **VOLUME knob**: fully left is OFF; turn right to switch on and turn up
 - **Search**: type `OFM`, `94.7`, `947`, `East Coast Radio`, `ecr` … and tap a result to tune straight to it
 - **Scan**: jumps to the next station that actually plays and skips dead streams
+- **♫ Find Song**: tap while a song plays to see what it is. It reads the song name the station broadcasts,
+  saves it to **Songs**, and lets you play it free on YouTube, YouTube Music, Spotify or Deezer (plus a 30-second preview in the app)
 - **Save / Favs / Recent**: long-press the dial or tap Save to keep a station
 - **Setup**: sleep timer, static on/off, amber or green dial light, share, update
 

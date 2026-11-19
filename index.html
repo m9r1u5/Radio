@@ -47,6 +47,7 @@
     <!-- BODY -->
     <div class="body">
       <div class="grille">
+        <button class="find" id="btnFind" aria-label="Find song"><span class="ring"></span><b>&#9835;</b><small>FIND SONG</small></button>
         <div class="plate">RETRO RADIO</div>
       </div>
       <div class="panel">
@@ -79,6 +80,7 @@
     <button id="btnScan" aria-label="Scan">&#9654;&#9654;<span>Scan</span></button>
     <button id="btnFav" aria-label="Favourite">&#9734;<span>Save</span></button>
     <button id="btnFavs" aria-label="Favourites">&#9733;<span>Favs</span></button>
+    <button id="btnSongs" aria-label="My songs">&#9835;<span>Songs</span></button>
     <button id="btnRecent" aria-label="Recent">&#8635;<span>Recent</span></button>
     <button id="btnSettings" aria-label="Settings">&#9881;<span>Setup</span></button>
   </nav>
@@ -102,6 +104,15 @@
   </header>
   <input id="listFilter" type="search" placeholder="Filter…" autocomplete="off" hidden>
   <ul class="list" id="listItems"></ul>
+</section>
+
+<!-- SONG CARD -->
+<section class="sheet" id="songSheet" hidden>
+  <header>
+    <h2>Song</h2>
+    <button class="close" data-close>&times;</button>
+  </header>
+  <div class="song" id="songCard"></div>
 </section>
 
 <!-- SETTINGS -->

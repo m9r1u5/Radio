@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -858,6 +858,7 @@ function setupNative() {
     nativeRadio = {
       start: o => C.nativePromise('RadioService', 'start', o),
       stop: () => C.nativePromise('RadioService', 'stop', {}),
+      nowPlaying: o => C.nativePromise('RadioService', 'nowPlaying', o),
       addListener: (ev, cb) => C.nativeCallback && C.nativeCallback('RadioService', 'addListener', { eventName: ev }, cb)
     };
   }
@@ -875,12 +876,207 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') { knobs.tune.turn(-1); tune(-1); }
 });
 
+/* ---------------- find song (what is the station playing?) ----------------
+   Radio stations broadcast the current song name inside the stream (ICY "StreamTitle").
+   Android app: read natively (no CORS limits). Web app: read in the browser where the station allows it. */
+function extractTitle(meta) {
+  const i = meta.indexOf("StreamTitle='"); if (i < 0) return undefined;
+  const a = i + 13; let j = meta.indexOf("';", a); if (j < 0) j = meta.lastIndexOf("'"); if (j < a) j = meta.length;
+  return meta.slice(a, j).replace(/\0/g, ' ').trim();
+}
+function decodeMeta(bytes) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (e) { return new TextDecoder('iso-8859-1').decode(bytes); }
+}
+// returns: string (title, may be ''), or undefined when more bytes are needed
+function parseIcy(buf, mi) {
+  let pos = mi;
+  while (pos < buf.length) {
+    const len = buf[pos] * 16;
+    if (pos + 1 + len > buf.length) return undefined;
+    if (len > 0) { const t = extractTitle(decodeMeta(buf.subarray(pos + 1, pos + 1 + len))); if (t) return t; }
+    pos += 1 + len + mi;
+  }
+  return undefined;
+}
+// no icy-metaint header visible: look for the metadata block directly
+function scanIcy(buf) {
+  const txt = new TextDecoder('iso-8859-1').decode(buf); // 1 char per byte, so indexes match bytes
+  const i = txt.indexOf("StreamTitle='"); if (i < 0) return undefined;
+  const j = txt.indexOf("';", i); if (j < 0) return undefined;
+  return extractTitle(decodeMeta(buf.subarray(i, j + 2)));
+}
+async function icyBrowser(url) {
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 12000);
+  try {
+    const r = await fetch(url, { headers: { 'Icy-MetaData': '1' }, signal: ctl.signal, cache: 'no-store' });
+    if (!r.ok || !r.body) return null;
+    const mi = parseInt(r.headers.get('icy-metaint') || '0', 10);
+    const reader = r.body.getReader();
+    let buf = new Uint8Array(0);
+    const max = mi ? mi * 4 + 4 * 4081 : 262144;
+    while (buf.length < max) {
+      const { done, value } = await reader.read(); if (done) break;
+      const nb = new Uint8Array(buf.length + value.length); nb.set(buf); nb.set(value, buf.length); buf = nb;
+      const t = mi ? parseIcy(buf, mi) : scanIcy(buf);
+      if (t !== undefined) { reader.cancel().catch(() => { }); return t; }
+    }
+    reader.cancel().catch(() => { });
+    return null;
+  } catch (e) { return null; } finally { clearTimeout(timer); try { ctl.abort(); } catch (e) { } }
+}
+async function readNowPlaying(st) {
+  const url = st.url || await resolveUrl(st);
+  if (!url) return { err: 'nostream' };
+  if (st.hls || /\.m3u8(\?|$)/i.test(url)) return { err: 'hls' };
+  if (IS_NATIVE && nativeRadio && nativeRadio.nowPlaying) {
+    try { const r = await nativeRadio.nowPlaying({ url }); return { title: (r && r.title) || '' }; } catch (e) { /* fall back */ }
+  }
+  const t = await icyBrowser(url);
+  return t == null ? { err: 'blocked' } : { title: t };
+}
+function looksLikeSong(t, st) {
+  if (!t || t.length < 3) return false;
+  const n = norm(t);
+  if (n === norm(st.name) || n.length < 3) return false;
+  if (/^(advert|adbreak|commercial|news|traffic|weather|jingle|promo)/i.test(t.trim())) return false;
+  if (/^https?:\/\//i.test(t)) return false;
+  return true;
+}
+function splitTitle(raw) {
+  const s = raw.replace(/\s+/g, ' ').trim();
+  const m = s.match(/^(.+?)\s+[-–—~|]\s+(.+)$/);
+  return m ? { artist: m[1].trim(), title: m[2].trim() } : { artist: '', title: s };
+}
+function jsonp(url, ms = 7000) {
+  return new Promise((res, rej) => {
+    const cb = 'rrcb' + Date.now() + Math.floor(Math.random() * 1e5);
+    const s = document.createElement('script');
+    const done = () => { clearTimeout(t); try { delete window[cb]; } catch (e) { window[cb] = undefined; } s.remove(); };
+    const t = setTimeout(() => { done(); rej(new Error('timeout')); }, ms);
+    window[cb] = d => { done(); res(d); };
+    s.onerror = () => { done(); rej(new Error('jsonp')); };
+    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+    document.head.appendChild(s);
+  });
+}
+// free lookups for album art + 30-second preview (no keys): iTunes, then Deezer
+async function lookupTrack(artist, title) {
+  const q = (artist + ' ' + title).replace(/\(.*?\)|\[.*?\]|feat\.?.*$/gi, ' ').replace(/\s+/g, ' ').trim();
+  try {
+    const j = await jsonp(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=3&country=ZA`);
+    const r = j && j.results && j.results[0];
+    if (r) return { artist: r.artistName, title: r.trackName, art: (r.artworkUrl100 || '').replace('100x100', '600x600'), preview: r.previewUrl || '', album: r.collectionName || '' };
+  } catch (e) { }
+  try {
+    const j = await jsonp(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=3&output=jsonp`);
+    const r = j && j.data && j.data[0];
+    if (r) return { artist: r.artist && r.artist.name, title: r.title, art: r.album && (r.album.cover_big || r.album.cover_medium) || '', preview: r.preview || '', album: r.album && r.album.title || '' };
+  } catch (e) { }
+  return null;
+}
+
+let finding = false, shownSongId = null;
+function saveSong(song) {
+  const songs = store.get('songs', []).filter(x => x.id !== song.id);
+  songs.unshift(song); store.set('songs', songs.slice(0, 300));
+}
+async function findSong() {
+  if (finding) return;
+  const st = S.current;
+  if (!S.power || !st) { toast('Switch the radio on and tune to a station first'); return; }
+  if (!navigator.onLine) { toast('No internet connection'); return; }
+  finding = true; vibrate(20);
+  const btn = $('btnFind'); btn.classList.add('listening');
+  const prevStatus = $('status').textContent;
+  setStatus('♫ Listening…');
+  try {
+    const [res] = await Promise.all([readNowPlaying(st), sleep(1200)]);
+    if (res.err === 'hls') { toast('This station does not send song names'); return; }
+    if (res.err === 'blocked') { toast(IS_NATIVE ? 'Could not read this station — try again' : 'This station blocks song info in the web app. The Android app can read it.', 3500); return; }
+    if (res.err || !looksLikeSong(res.title, st)) { toast(res.title ? 'No song right now: “' + res.title + '”' : 'No song info right now (advert, news or DJ talking?)', 3500); return; }
+    const guess = splitTitle(res.title);
+    setStatus('♫ Found: ' + res.title);
+    const song = {
+      id: Date.now(), raw: res.title, artist: guess.artist, title: guess.title, album: '', art: '', preview: '',
+      station: st.name, region: st.region, country: st.country || country().name, at: Date.now()
+    };
+    let songs = store.get('songs', []);
+    const dup = songs.find(x => norm(x.raw) === norm(song.raw) && Date.now() - x.at < 15 * 60000);
+    if (dup) Object.assign(song, { id: dup.id, artist: dup.artist, title: dup.title, album: dup.album, art: dup.art, preview: dup.preview });
+    saveSong(song);
+    vibrate([15, 60, 15]);
+    showSong(song);
+    if (!song.art) lookupTrack(guess.artist, guess.title).then(info => { // add album art + preview when found
+      if (!info) return;
+      Object.assign(song, { artist: info.artist || song.artist, title: info.title || song.title, album: info.album || '', art: info.art || '', preview: info.preview || '' });
+      saveSong(song);
+      if (!$('songSheet').hidden && shownSongId === song.id) showSong(song);
+    }).catch(() => { });
+  } finally {
+    btn.classList.remove('listening'); finding = false;
+    setTimeout(() => { if ($('status').textContent.startsWith('♫')) setStatus(prevStatus && !prevStatus.startsWith('♫') ? prevStatus : 'On air'); }, 4000);
+  }
+}
+
+// open a link in the phone's browser / YouTube / Spotify app
+function openExternal(url) { if (IS_NATIVE) location.href = url; else window.open(url, '_blank', 'noopener'); }
+const songQuery = s => encodeURIComponent((s.artist ? s.artist + ' ' : '') + s.title);
+const preview = new Audio(); preview.preload = 'none';
+function stopPreview() {
+  if (!preview.paused) preview.pause();
+  audio.muted = false;
+  const b = $('btnPreview'); if (b) b.innerHTML = '&#9654; Play 30-sec preview here';
+}
+preview.addEventListener('ended', stopPreview);
+preview.addEventListener('pause', () => { audio.muted = false; });
+function showSong(song) {
+  stopPreview();
+  shownSongId = song.id;
+  const when = new Date(song.at);
+  const q = songQuery(song);
+  $('songCard').innerHTML = `
+    ${song.art ? `<img class="art" src="${esc(song.art)}" referrerpolicy="no-referrer" alt="">` : '<div class="art">&#9835;</div>'}
+    <div class="ttl">${esc(song.title)}</div>
+    <div class="art-name">${esc(song.artist || 'Unknown artist')}</div>
+    <div class="when">Heard on ${esc(song.station)} · ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+    ${norm(song.raw) !== norm(song.artist + song.title) ? `<div class="raw">Station said: “${esc(song.raw)}”</div>` : ''}
+    <div class="acts">
+      <button class="wide main yt" data-go="https://www.youtube.com/results?search_query=${q}">&#9654; Play full song on YouTube</button>
+      ${song.preview ? '<button class="wide main" id="btnPreview">&#9654; Play 30-sec preview here</button>' : ''}
+      <button class="wide yt" data-go="https://music.youtube.com/search?q=${q}">YouTube Music</button>
+      <button class="wide sp" data-go="https://open.spotify.com/search/${q}">Spotify</button>
+      <button class="wide dz" data-go="https://www.deezer.com/search/${q}">Deezer</button>
+      <button class="wide ghost" id="btnSongDel">Delete</button>
+    </div>`;
+  $('songCard').querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { stopPreview(); openExternal(b.dataset.go); }));
+  const pb = $('btnPreview');
+  if (pb) pb.addEventListener('click', () => {
+    if (!preview.paused) { stopPreview(); return; }
+    preview.src = song.preview; audio.muted = true;
+    preview.play().then(() => { pb.innerHTML = '&#9632; Stop preview'; }).catch(() => { audio.muted = false; toast('Preview not available'); });
+  });
+  $('btnSongDel').addEventListener('click', () => { store.set('songs', store.get('songs', []).filter(x => x.id !== song.id)); stopPreview(); closeSheets(); toast('Song deleted'); });
+  openSheet('songSheet');
+}
+function showSongs() {
+  const songs = store.get('songs', []);
+  openList('My songs (' + songs.length + ')', songs.map(s => Object.assign({ label: s.artist + ' ' + s.title + ' ' + s.station }, s)), {
+    filter: songs.length > 8,
+    render: s => `${s.art ? `<img src="${esc(s.art)}" loading="lazy" referrerpolicy="no-referrer">` : '<div class="ph">&#9835;</div>'}<div class="t"><div class="n">${esc(s.title)}</div><div class="m">${esc(s.artist || 'Unknown artist')} · ${esc(s.station)} · ${new Date(s.at).toLocaleDateString()}</div></div>`,
+    onPick: s => showSong(s),
+    onRemove: s => { store.set('songs', store.get('songs', []).filter(x => x.id !== s.id)); showSongs(); }
+  });
+}
+document.addEventListener('click', e => { if (e.target.closest('#songSheet [data-close]')) stopPreview(); });
+
 /* ---------------- buttons ---------------- */
 $('btnSearch').addEventListener('click', () => { ensureAudioCtx(); openSheet('searchSheet'); $('searchInput').value = ''; runSearch(''); setTimeout(() => $('searchInput').focus(), 60); });
 $('btnScan').addEventListener('click', () => { ensureAudioCtx(); S.scanning ? stopScan() : startScan(); });
 $('btnFav').addEventListener('click', toggleFav);
 $('btnFavs').addEventListener('click', showFavs);
 $('btnRecent').addEventListener('click', showRecent);
+$('btnSongs').addEventListener('click', showSongs);
+$('btnFind').addEventListener('click', findSong);
 $('btnSettings').addEventListener('click', () => openSheet('settingsSheet'));
 
 /* ---------------- boot ---------------- */

@@ -8,7 +8,7 @@ import os, re, shutil, glob
 PKG = 'com/m9r1u5/retroradio'
 java_dir = os.path.join('android/app/src/main/java', PKG)
 os.makedirs(java_dir, exist_ok=True)
-for f in ('MainActivity.java', 'RadioService.java', 'RadioServicePlugin.java'):
+for f in ('MainActivity.java', 'RadioService.java', 'RadioServicePlugin.java', 'IcyReader.java'):
     shutil.copy(os.path.join('native', f), os.path.join(java_dir, f))
 
 mf = 'android/app/src/main/AndroidManifest.xml'
