@@ -17,6 +17,8 @@ perms = ['android.permission.INTERNET', 'android.permission.WAKE_LOCK', 'android
          'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK', 'android.permission.POST_NOTIFICATIONS',
          'android.permission.ACCESS_NETWORK_STATE', 'android.permission.ACCESS_WIFI_STATE']
 add = ''.join(f'    <uses-permission android:name="{p}" />\n' for p in perms if p not in x)
+if '<queries>' not in x:
+    add += '    <queries>\n        <package android:name="com.shazam.android" />\n    </queries>\n'
 x = x.replace('<application', add + '\n    <application', 1)
 if 'usesCleartextTraffic' not in x:
     x = x.replace('<application', '<application\n        android:usesCleartextTraffic="true"', 1)

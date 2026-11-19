@@ -1,6 +1,8 @@
 package com.m9r1u5.retroradio;
 
+import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 
 import com.getcapacitor.JSObject;
@@ -76,6 +78,41 @@ public class RadioServicePlugin extends Plugin {
                 call.reject("fetch failed: " + e.getMessage());
             }
         }).start();
+    }
+
+    /** Opens Shazam and starts listening (falls back to opening the app, then the Play Store). */
+    @PluginMethod
+    public void openShazam(PluginCall call) {
+        Context ctx = getContext();
+        JSObject r = new JSObject();
+        try {
+            Intent i = new Intent("com.shazam.android.intent.actions.START_TAGGING");
+            i.setPackage("com.shazam.android");
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            r.put("opened", "tagging");
+            call.resolve(r);
+            return;
+        } catch (Exception ignored) { }
+        try {
+            Intent i = ctx.getPackageManager().getLaunchIntentForPackage("com.shazam.android");
+            if (i != null) {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(i);
+                r.put("opened", "app");
+                call.resolve(r);
+                return;
+            }
+        } catch (Exception ignored) { }
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.shazam.android"));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            r.put("opened", "store");
+        } catch (Exception e) {
+            r.put("opened", "none");
+        }
+        call.resolve(r);
     }
 
     static void stopPressed() {

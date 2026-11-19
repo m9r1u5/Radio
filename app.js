@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.2.2';
+const APP_VERSION = '1.3.0';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -781,6 +781,7 @@ function applySettings() {
   document.body.classList.toggle('amber', S.settings.light !== 'green');
   $('setStatic').checked = !!S.settings.static;
   $('setLight').value = S.settings.light;
+  $('setFind').value = S.settings.findMode === 'station' ? 'station' : 'shazam';
 }
 function saveSettings() { store.set('settings', S.settings); applySettings(); }
 $('setStatic').addEventListener('change', e => { S.settings.static = e.target.checked; saveSettings(); if (!e.target.checked) staticTo(0); });
@@ -860,6 +861,7 @@ function setupNative() {
       stop: () => C.nativePromise('RadioService', 'stop', {}),
       nowPlaying: o => C.nativePromise('RadioService', 'nowPlaying', o),
       fetchText: o => C.nativePromise('RadioService', 'fetchText', o),
+      openShazam: () => C.nativePromise('RadioService', 'openShazam', {}),
       addListener: (ev, cb) => C.nativeCallback && C.nativeCallback('RadioService', 'addListener', { eventName: ev }, cb)
     };
   }
@@ -1064,6 +1066,31 @@ function saveSong(song) {
   const songs = store.get('songs', []).filter(x => x.id !== song.id);
   songs.unshift(song); store.set('songs', songs.slice(0, 300));
 }
+// Find Song: hand over to the Shazam app, which listens to the radio playing on the phone
+async function openShazam() {
+  if (!S.power || !S.current) { toast('Switch the radio on and tune to a station first'); return; }
+  vibrate(20);
+  const btn = $('btnFind'); btn.classList.add('listening'); setTimeout(() => btn.classList.remove('listening'), 2500);
+  if (S.volume < 0.35) toast('Turn the volume up a bit so Shazam can hear the song', 3500);
+  if (IS_NATIVE && nativeRadio && nativeRadio.openShazam) {
+    try {
+      const r = await nativeRadio.openShazam();
+      const how = r && r.opened;
+      if (how === 'app') toast('Tap the Shazam button to identify the song', 3500);
+      else if (how === 'store') toast('Install Shazam from the Play Store, then tap FIND SONG again', 4500);
+      else if (how === 'none') toast('Could not open Shazam');
+      return;
+    } catch (e) { /* fall through */ }
+  }
+  if (IS_IOS) { toast('On iPhone: open Control Centre and tap the Shazam (music recognition) button', 5000); return; }
+  if (/Android/i.test(navigator.userAgent)) {
+    location.href = 'intent://#Intent;action=com.shazam.android.intent.actions.START_TAGGING;package=com.shazam.android;S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/apps/details?id=com.shazam.android') + ';end';
+    return;
+  }
+  toast('Open Shazam on your phone and let it listen to the radio', 4000);
+}
+function onFind() { if (S.settings.findMode === 'station') findSong(); else openShazam(); }
+
 async function findSong() {
   if (finding) return;
   const st = S.current;
@@ -1223,7 +1250,8 @@ $('btnFav').addEventListener('click', toggleFav);
 $('btnFavs').addEventListener('click', showFavs);
 $('btnRecent').addEventListener('click', showRecent);
 $('btnSongs').addEventListener('click', showSongs);
-$('btnFind').addEventListener('click', findSong);
+$('btnFind').addEventListener('click', onFind);
+$('setFind').addEventListener('change', e => { S.settings.findMode = e.target.value; saveSettings(); });
 $('btnProbe').addEventListener('click', runProbe);
 $('btnProbeAgain').addEventListener('click', runProbe);
 $('btnProbeCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('diagLog').textContent); toast('Copied — paste it to Claude'); } catch (e) { toast('Could not copy — take a screenshot instead'); } });
