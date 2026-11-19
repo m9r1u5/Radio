@@ -115,6 +115,19 @@
   <div class="song" id="songCard"></div>
 </section>
 
+<!-- SONG-INFO TEST -->
+<section class="sheet" id="diagSheet" hidden>
+  <header>
+    <h2>Song-info test</h2>
+    <button class="close" data-close>&times;</button>
+  </header>
+  <pre class="diag" id="diagLog"></pre>
+  <div class="diag-btns">
+    <button class="wide" id="btnProbeAgain">Test again</button>
+    <button class="wide ghost" id="btnProbeCopy">Copy</button>
+  </div>
+</section>
+
 <!-- SETTINGS -->
 <section class="sheet" id="settingsSheet" hidden>
   <header>
@@ -135,6 +148,7 @@
     <label class="row">Dial light
       <select id="setLight"><option value="amber">Warm amber</option><option value="green">Green</option></select>
     </label>
+    <button class="wide" id="btnProbe">Song-info test (current station)</button>
     <button class="wide" id="btnShare">Share Retro Radio</button>
     <button class="wide" id="btnUpdate">Check for update</button>
     <button class="wide ghost" id="btnClearDead">Clear dead-station list</button>

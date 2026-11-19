@@ -207,6 +207,9 @@ body:not(.off) .led { background: #ff3b2f; box-shadow: 0 0 6px #ff3b2f; }
 .song .acts .sp { background: linear-gradient(180deg, #5fe08a, #1aa34a); color: #082; color: #04210f; }
 .song .acts .dz { background: linear-gradient(180deg, #b38bff, #6b3fd1); color: #fff; }
 
+pre.diag { flex: 1; overflow: auto; margin: 0 0 10px; padding: 10px; background: #0c0a08; border: 1px solid #333; border-radius: 10px; color: #cfc; font-size: 12px; white-space: pre-wrap; word-break: break-all; user-select: text; -webkit-user-select: text; }
+.diag-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
 /* ---------- BUTTONS ---------- */
 .buttons { display: flex; gap: 5px; width: var(--w); justify-content: space-between; }
 .buttons button {

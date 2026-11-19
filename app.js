@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -859,6 +859,7 @@ function setupNative() {
       start: o => C.nativePromise('RadioService', 'start', o),
       stop: () => C.nativePromise('RadioService', 'stop', {}),
       nowPlaying: o => C.nativePromise('RadioService', 'nowPlaying', o),
+      fetchText: o => C.nativePromise('RadioService', 'fetchText', o),
       addListener: (ev, cb) => C.nativeCallback && C.nativeCallback('RadioService', 'addListener', { eventName: ev }, cb)
     };
   }
@@ -924,15 +925,83 @@ async function icyBrowser(url) {
     return null;
   } catch (e) { return null; } finally { clearTimeout(timer); try { ctl.abort(); } catch (e) { } }
 }
-async function readNowPlaying(st) {
-  const url = st.url || await resolveUrl(st);
-  if (!url) return { err: 'nostream' };
-  if (st.hls || /\.m3u8(\?|$)/i.test(url)) return { err: 'hls' };
-  if (IS_NATIVE && nativeRadio && nativeRadio.nowPlaying) {
-    try { const r = await nativeRadio.nowPlaying({ url }); return { title: (r && r.title) || '' }; } catch (e) { /* fall back */ }
+// some stations use the Triton Digital CDN, which also has a public "now playing" service
+function tritonMount(u) {
+  try {
+    const x = new URL(u);
+    if (!/streamtheworld\.com|tritondigital|triton/i.test(x.hostname)) return null;
+    const seg = x.pathname.split('/').filter(Boolean).pop() || '';
+    return seg.replace(/\.(mp3|aac|m3u8|pls|m3u|flv)$/i, '').replace(/_SC$/i, '') || null;
+  } catch (e) { return null; }
+}
+async function getText(url) {
+  if (IS_NATIVE && nativeRadio && nativeRadio.fetchText) { const r = await nativeRadio.fetchText({ url }); return (r && r.text) || ''; }
+  const r = await fetchT(url, 8000); return r.ok ? r.text() : '';
+}
+async function tritonNowPlaying(u, log) {
+  const m = tritonMount(u); if (!m) return '';
+  const mounts = [m]; if (/AAC$/i.test(m)) mounts.push(m.replace(/AAC$/i, ''));
+  for (const mount of mounts) {
+    try {
+      log.push('Triton now-playing: ' + mount);
+      const xml = await getText(`https://np.tritondigital.com/public/nowplaying?mountName=${encodeURIComponent(mount)}&numberToFetch=1&eventType=track`);
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      const info = doc.querySelector('nowplaying-info'); if (!info) { log.push('  nothing'); continue; }
+      const prop = n => { const e = info.querySelector(`property[name="${n}"]`); return e ? e.textContent.trim() : ''; };
+      const title = prop('cue_title'), artist = prop('track_artist_name');
+      log.push('  ' + artist + ' - ' + title);
+      if (title) return artist ? artist + ' - ' + title : title;
+    } catch (e) { log.push('  error ' + e.message); }
   }
-  const t = await icyBrowser(url);
-  return t == null ? { err: 'blocked' } : { title: t };
+  return '';
+}
+// tidy up titles like: text="Song" song_spot="M" ... artist="Name"
+function cleanTitle(t) {
+  t = String(t || '').trim();
+  const tx = t.match(/text="([^"]*)"/i);
+  if (tx) { const ar = t.match(/artist="([^"]*)"/i); t = (ar && ar[1] ? ar[1] + ' - ' : '') + tx[1]; }
+  return t.replace(/\s+/g, ' ').replace(/^[-–\s]+|[-–\s]+$/g, '').trim();
+}
+let lastProbe = null;
+async function readNowPlaying(st) {
+  const log = [];
+  const url = st.url || await resolveUrl(st);
+  log.push('Station: ' + st.name + '  (' + (IS_NATIVE ? 'Android app' : 'web app') + ')');
+  log.push('Stream: ' + (url || 'none'));
+  const finish = res => { lastProbe = { station: st.name, at: Date.now(), log: log.join('\n'), result: res }; return res; };
+  if (!url) return finish({ err: 'nostream' });
+  if (st.hls || /\.m3u8(\?|$)/i.test(url)) { log.push('HLS stream'); }
+  let title = '', finalUrl = url, read = false;
+  if (IS_NATIVE && nativeRadio && nativeRadio.nowPlaying) {
+    try {
+      const r = await nativeRadio.nowPlaying({ url });
+      read = true; title = (r && r.title) || ''; finalUrl = (r && r.finalUrl) || url;
+      if (r && r.log) log.push(r.log.trim());
+    } catch (e) { log.push('native reader error: ' + (e.message || e)); }
+  }
+  if (!read) {
+    const t = await icyBrowser(url);
+    log.push(t == null ? 'browser read blocked (CORS)' : 'browser read: "' + t + '"');
+    if (t != null) { read = true; title = t; }
+  }
+  title = cleanTitle(title);
+  if (!looksLikeSong(title, st)) {
+    const tt = cleanTitle(await tritonNowPlaying(finalUrl, log) || (finalUrl !== url ? await tritonNowPlaying(url, log) : ''));
+    if (tt) { title = tt; read = true; }
+  }
+  log.push('Result: "' + title + '"');
+  if (!read) return finish({ err: 'blocked' });
+  return finish({ title });
+}
+function showProbe() {
+  const p = lastProbe;
+  $('diagLog').textContent = p ? p.log : 'Tune to a station and tap FIND SONG (or the button below) first.';
+  openSheet('diagSheet');
+}
+async function runProbe() {
+  const st = S.current; if (!st) { toast('Tune to a station first'); return; }
+  $('diagLog').textContent = 'Testing ' + st.name + '…'; openSheet('diagSheet');
+  await readNowPlaying(st); showProbe();
 }
 function looksLikeSong(t, st) {
   if (!t || t.length < 3) return false;
@@ -991,9 +1060,8 @@ async function findSong() {
   setStatus('♫ Listening…');
   try {
     const [res] = await Promise.all([readNowPlaying(st), sleep(1200)]);
-    if (res.err === 'hls') { toast('This station does not send song names'); return; }
     if (res.err === 'blocked') { toast(IS_NATIVE ? 'Could not read this station — try again' : 'This station blocks song info in the web app. The Android app can read it.', 3500); return; }
-    if (res.err || !looksLikeSong(res.title, st)) { toast(res.title ? 'No song right now: “' + res.title + '”' : 'No song info right now (advert, news or DJ talking?)', 3500); return; }
+    if (res.err || !looksLikeSong(res.title, st)) { toast((res.title ? 'No song name from this station right now: “' + res.title + '”' : 'This station is not sending a song name right now') + ' — details: Setup › Song-info test', 4500); return; }
     const guess = splitTitle(res.title);
     setStatus('♫ Found: ' + res.title);
     const song = {
@@ -1077,6 +1145,9 @@ $('btnFavs').addEventListener('click', showFavs);
 $('btnRecent').addEventListener('click', showRecent);
 $('btnSongs').addEventListener('click', showSongs);
 $('btnFind').addEventListener('click', findSong);
+$('btnProbe').addEventListener('click', runProbe);
+$('btnProbeAgain').addEventListener('click', runProbe);
+$('btnProbeCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('diagLog').textContent); toast('Copied — paste it to Claude'); } catch (e) { toast('Could not copy — take a screenshot instead'); } });
 $('btnSettings').addEventListener('click', () => openSheet('settingsSheet'));
 
 /* ---------------- boot ---------------- */

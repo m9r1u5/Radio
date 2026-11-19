@@ -47,19 +47,33 @@ public class RadioServicePlugin extends Plugin {
         call.resolve();
     }
 
-    /** Reads the song title the station is broadcasting right now (ICY StreamTitle). */
+    /** Reads the song title the station is broadcasting right now (ICY StreamTitle), with a diagnostic log. */
     @PluginMethod
     public void nowPlaying(PluginCall call) {
         final String url = call.getString("url");
         if (url == null || url.isEmpty()) { call.reject("No stream URL"); return; }
         new Thread(() -> {
+            IcyReader.Result res = IcyReader.probe(url);
+            JSObject r = new JSObject();
+            r.put("title", res.title == null ? "" : res.title);
+            r.put("finalUrl", res.finalUrl);
+            r.put("log", res.log.toString());
+            call.resolve(r);
+        }).start();
+    }
+
+    /** Plain GET without browser CORS limits (for "now playing" web services). */
+    @PluginMethod
+    public void fetchText(PluginCall call) {
+        final String url = call.getString("url");
+        if (url == null || url.isEmpty()) { call.reject("No URL"); return; }
+        new Thread(() -> {
             try {
-                String t = IcyReader.read(url);
                 JSObject r = new JSObject();
-                r.put("title", t == null ? "" : t);
+                r.put("text", IcyReader.fetchText(url));
                 call.resolve(r);
             } catch (Exception e) {
-                call.reject("Could not read song info: " + e.getMessage());
+                call.reject("fetch failed: " + e.getMessage());
             }
         }).start();
     }
