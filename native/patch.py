@@ -27,6 +27,20 @@ if '.RadioService' not in x:
 open(mf, 'w', encoding='utf-8').write(x)
 print(x)
 
+# version number shown in Android settings; versionCode goes up with every build
+try:
+    import json
+    gradle = 'android/app/build.gradle'
+    g = open(gradle, encoding='utf-8').read()
+    ver = json.load(open('version.json'))['version']
+    build = int(os.environ.get('GITHUB_RUN_NUMBER', '1'))
+    g = re.sub(r'versionCode\s+\d+', f'versionCode {build}', g, count=1)
+    g = re.sub(r'versionName\s+"[^"]*"', f'versionName "{ver}"', g, count=1)
+    open(gradle, 'w', encoding='utf-8').write(g)
+    print('version', ver, 'build', build)
+except Exception as e:
+    print('version step skipped:', e)
+
 # launcher icons
 try:
     from PIL import Image

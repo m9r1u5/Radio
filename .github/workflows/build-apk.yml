@@ -45,6 +45,18 @@ jobs:
           python3 native/patch.py
           npx cap sync android
 
+      - name: Use the app's permanent signing key (so updates install over the old app)
+        env:
+          KEY: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$KEY" ]; then
+            echo "$KEY" | base64 -d > ~/.android/debug.keystore
+            echo "Using the permanent signing key"
+          else
+            echo "::warning::Secret ANDROID_DEBUG_KEYSTORE is not set - this APK gets a random key and will not install over the old app"
+          fi
+
       - name: Build debug APK
         working-directory: android
         run: |
