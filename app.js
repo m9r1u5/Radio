@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -1028,20 +1028,35 @@ function jsonp(url, ms = 7000) {
     document.head.appendChild(s);
   });
 }
-// free lookups for album art + 30-second preview (no keys): iTunes, then Deezer
-async function lookupTrack(artist, title) {
-  const q = (artist + ' ' + title).replace(/\(.*?\)|\[.*?\]|feat\.?.*$/gi, ' ').replace(/\s+/g, ' ').trim();
+// free lookups for album art + 30-second preview (no keys): iTunes, then Deezer.
+// A result is only accepted when its title AND artist really appear in what the station sent.
+const STOP_WORDS = new Set(['the', 'a', 'an', 'and', 'of', 'feat', 'ft', 'featuring', 'remix', 'edit', 'radio', 'version', 'mix', 'original', 'remastered', 'live', 'x', 'vs']);
+function words(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\(.*?\)|\[.*?\]/g, ' ')
+    .split(/[^a-z0-9]+/).filter(w => w.length > 1 && !STOP_WORDS.has(w));
+}
+function goodMatch(c, raw) {
+  const r = new Set(words(raw));
+  const tw = words(c.title), aw = words(c.artist);
+  if (!tw.length || !aw.length) return false;
+  const t = tw.filter(w => r.has(w)).length / tw.length;
+  const a = aw.filter(w => r.has(w)).length / aw.length;
+  return t >= 0.6 && a >= 0.5;
+}
+async function lookupTrack(raw) {
+  const q = raw.replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/\s+[-–—~|]\s+/g, ' ').replace(/\s+/g, ' ').trim();
+  const cands = [];
   try {
-    const j = await jsonp(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=3&country=ZA`);
-    const r = j && j.results && j.results[0];
-    if (r) return { artist: r.artistName, title: r.trackName, art: (r.artworkUrl100 || '').replace('100x100', '600x600'), preview: r.previewUrl || '', album: r.collectionName || '' };
+    const j = await jsonp(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=8&country=ZA`);
+    (j && j.results || []).forEach(r => cands.push({ artist: r.artistName, title: r.trackName, art: (r.artworkUrl100 || '').replace('100x100', '600x600'), preview: r.previewUrl || '', album: r.collectionName || '' }));
   } catch (e) { }
+  let hit = cands.find(c => goodMatch(c, raw));
+  if (hit) return hit;
   try {
-    const j = await jsonp(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=3&output=jsonp`);
-    const r = j && j.data && j.data[0];
-    if (r) return { artist: r.artist && r.artist.name, title: r.title, art: r.album && (r.album.cover_big || r.album.cover_medium) || '', preview: r.preview || '', album: r.album && r.album.title || '' };
+    const j = await jsonp(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=8&output=jsonp`);
+    (j && j.data || []).forEach(r => cands.push({ artist: r.artist && r.artist.name, title: r.title, art: r.album && (r.album.cover_big || r.album.cover_medium) || '', preview: r.preview || '', album: r.album && r.album.title || '' }));
   } catch (e) { }
-  return null;
+  return cands.find(c => goodMatch(c, raw)) || null;
 }
 
 let finding = false, shownSongId = null;
@@ -1062,7 +1077,17 @@ async function findSong() {
     const [res] = await Promise.all([readNowPlaying(st), sleep(1200)]);
     if (res.err === 'blocked') { toast(IS_NATIVE ? 'Could not read this station — try again' : 'This station blocks song info in the web app. The Android app can read it.', 3500); return; }
     if (res.err || !looksLikeSong(res.title, st)) { toast((res.title ? 'No song name from this station right now: “' + res.title + '”' : 'This station is not sending a song name right now') + ' — details: Setup › Song-info test', 4500); return; }
+    // a station that keeps sending the same text for a long time is not updating its song info
+    const seen = store.get('lastRaw', {});
+    const prev = seen[st.id];
+    if (prev && norm(prev.raw) === norm(res.title)) {
+      if (Date.now() - prev.since > 9 * 60000) {
+        toast(`${st.name} has been sending “${res.title}” for ${Math.round((Date.now() - prev.since) / 60000)} minutes, so it is not the song playing now. This station doesn't update its song info.`, 6000);
+        return;
+      }
+    } else { seen[st.id] = { raw: res.title, since: Date.now() }; store.set('lastRaw', seen); }
     const guess = splitTitle(res.title);
+    if (!guess.artist) { toast(`${st.name} sent “${res.title}” — that doesn't look like “Artist - Song”, so it may not be the song.`, 4500); }
     setStatus('♫ Found: ' + res.title);
     const song = {
       id: Date.now(), raw: res.title, artist: guess.artist, title: guess.title, album: '', art: '', preview: '',
@@ -1074,7 +1099,7 @@ async function findSong() {
     saveSong(song);
     vibrate([15, 60, 15]);
     showSong(song);
-    if (!song.art) lookupTrack(guess.artist, guess.title).then(info => { // add album art + preview when found
+    if (!song.art) lookupTrack(res.title).then(info => { // add album art + preview when found
       if (!info) return;
       Object.assign(song, { artist: info.artist || song.artist, title: info.title || song.title, album: info.album || '', art: info.art || '', preview: info.preview || '' });
       saveSong(song);
@@ -1130,7 +1155,7 @@ function showSongs() {
   const songs = store.get('songs', []);
   openList('My songs (' + songs.length + ')', songs.map(s => Object.assign({ label: s.artist + ' ' + s.title + ' ' + s.station }, s)), {
     filter: songs.length > 8,
-    render: s => `${s.art ? `<img src="${esc(s.art)}" loading="lazy" referrerpolicy="no-referrer">` : '<div class="ph">&#9835;</div>'}<div class="t"><div class="n">${esc(s.title)}</div><div class="m">${esc(s.artist || 'Unknown artist')} · ${esc(s.station)} · ${new Date(s.at).toLocaleDateString()}</div></div>`,
+    render: s => `${s.art ? `<img src="${esc(s.art)}" loading="lazy" referrerpolicy="no-referrer">` : '<div class="ph">&#9835;</div>'}<div class="t"><div class="n">${esc(s.title)}</div><div class="m">${esc(s.artist || 'Unknown artist')} · ${esc(s.station)} · ${new Date(s.at).toLocaleDateString()} ${new Date(s.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></div>`,
     onPick: s => showSong(s),
     onRemove: s => { store.set('songs', store.get('songs', []).filter(x => x.id !== s.id)); showSongs(); }
   });

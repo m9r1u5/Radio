@@ -1,6 +1,6 @@
 /* Retro Radio service worker: caches the app itself so it opens offline.
    Radio streams and the station directory are never cached here. */
-const CACHE = 'retro-radio-v1.2.1';
+const CACHE = 'retro-radio-v1.2.2';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'stations-za.json', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
