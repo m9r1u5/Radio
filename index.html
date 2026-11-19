@@ -128,6 +128,20 @@
   </div>
 </section>
 
+<!-- BACKUP / RESTORE -->
+<section class="sheet" id="backupSheet" hidden>
+  <header>
+    <h2 id="backupTitle">Backup</h2>
+    <button class="close" data-close>&times;</button>
+  </header>
+  <p class="small" id="backupHelp"></p>
+  <textarea class="backup" id="backupText" spellcheck="false"></textarea>
+  <div class="diag-btns">
+    <button class="wide" id="btnBackupAct">Copy</button>
+    <button class="wide ghost" id="btnBackupShare">Share</button>
+  </div>
+</section>
+
 <!-- SETTINGS -->
 <section class="sheet" id="settingsSheet" hidden>
   <header>
@@ -148,6 +162,8 @@
     <label class="row">Dial light
       <select id="setLight"><option value="amber">Warm amber</option><option value="green">Green</option></select>
     </label>
+    <button class="wide" id="btnBackup">Back up favourites &amp; songs</button>
+    <button class="wide ghost" id="btnRestoreOpen">Restore a backup</button>
     <button class="wide" id="btnProbe">Song-info test (current station)</button>
     <button class="wide" id="btnShare">Share Retro Radio</button>
     <button class="wide" id="btnUpdate">Check for update</button>

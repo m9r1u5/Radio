@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -1136,6 +1136,60 @@ function showSongs() {
   });
 }
 document.addEventListener('click', e => { if (e.target.closest('#songSheet [data-close]')) stopPreview(); });
+
+/* ---------------- backup & restore ---------------- */
+let backupMode = 'backup';
+function makeBackup() {
+  return JSON.stringify({ app: 'RetroRadio', v: 1, at: new Date().toISOString(), favs: store.get('favs', []), songs: store.get('songs', []), recent: store.get('recent', []), settings: S.settings });
+}
+function openBackup() {
+  backupMode = 'backup';
+  const favs = store.get('favs', []).length, songs = store.get('songs', []).length;
+  $('backupTitle').textContent = 'Back up';
+  $('backupHelp').textContent = `${favs} favourite${favs === 1 ? '' : 's'} and ${songs} song${songs === 1 ? '' : 's'}. Tap Copy or Share and keep this text somewhere safe (e.g. send it to yourself on WhatsApp or email). To restore: Setup › Restore a backup, and paste it.`;
+  $('backupText').value = makeBackup(); $('backupText').readOnly = true;
+  $('btnBackupAct').textContent = 'Copy'; $('btnBackupShare').hidden = false;
+  openSheet('backupSheet');
+}
+function openRestore() {
+  backupMode = 'restore';
+  $('backupTitle').textContent = 'Restore';
+  $('backupHelp').textContent = 'Paste your backup text below, then tap Restore. It is added to what you already have; nothing is deleted.';
+  $('backupText').value = ''; $('backupText').readOnly = false;
+  $('btnBackupAct').textContent = 'Restore'; $('btnBackupShare').hidden = false; $('btnBackupShare').textContent = 'Paste';
+  openSheet('backupSheet'); setTimeout(() => $('backupText').focus(), 80);
+}
+function mergeById(a, b) { const m = new Map(); [...a, ...b].forEach(x => { if (x && x.id != null && !m.has(x.id)) m.set(x.id, x); }); return [...m.values()]; }
+function doRestore(text) {
+  let d;
+  try { const t = text.trim(); d = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (e) { toast('That is not a Retro Radio backup'); return; }
+  if (!d || d.app !== 'RetroRadio') { toast('That is not a Retro Radio backup'); return; }
+  const favs = mergeById(store.get('favs', []), d.favs || []);
+  const songs = mergeById(store.get('songs', []), d.songs || []).sort((x, y) => (y.at || 0) - (x.at || 0));
+  store.set('favs', favs); store.set('songs', songs.slice(0, 300));
+  if (!store.get('recent', []).length && d.recent) store.set('recent', d.recent);
+  updateFavBtn(); closeSheets();
+  toast(`Restored: ${favs.length} favourite${favs.length === 1 ? "" : "s"}, ${songs.length} song${songs.length === 1 ? "" : "s"}`, 3000);
+}
+$('btnBackup').addEventListener('click', openBackup);
+$('btnRestoreOpen').addEventListener('click', openRestore);
+$('btnBackupAct').addEventListener('click', async () => {
+  if (backupMode === 'restore') { doRestore($('backupText').value); return; }
+  try { await navigator.clipboard.writeText($('backupText').value); toast('Backup copied — paste it somewhere safe'); }
+  catch (e) { $('backupText').select(); try { document.execCommand('copy'); toast('Backup copied'); } catch (e2) { toast('Select the text and copy it'); } }
+});
+$('btnBackupShare').addEventListener('click', async () => {
+  if (backupMode === 'restore') {
+    try { $('backupText').value = await navigator.clipboard.readText(); } catch (e) { toast('Long-press the box and choose Paste'); }
+    return;
+  }
+  const text = $('backupText').value;
+  try {
+    if (navigator.share) await navigator.share({ title: 'Retro Radio backup', text });
+    else if (IS_NATIVE) location.href = 'mailto:?subject=' + encodeURIComponent('Retro Radio backup') + '&body=' + encodeURIComponent(text);
+    else { await navigator.clipboard.writeText(text); toast('Copied (sharing not available here)'); }
+  } catch (e) { }
+});
 
 /* ---------------- buttons ---------------- */
 $('btnSearch').addEventListener('click', () => { ensureAudioCtx(); openSheet('searchSheet'); $('searchInput').value = ''; runSearch(''); setTimeout(() => $('searchInput').focus(), 60); });
