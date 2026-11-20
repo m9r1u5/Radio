@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -283,6 +283,7 @@ function ensureAudioCtx() {
   return ac;
 }
 function staticTo(level, tc = 0.08) {
+  if (S.casting) level = 0;
   if (!ac || !noiseGain) return;
   const v = S.settings.static && S.power ? level * Math.pow(S.volume, 1.5) * 0.45 : 0;
   noiseGain.gain.cancelScheduledValues(ac.currentTime);
@@ -359,6 +360,23 @@ async function playStream(st) {
   const url = await resolveUrl(st);
   if (token !== playToken) return null;
   if (!url) { setStatus('No signal — stream not found', true); markDead(st); staticTo(0.35); return false; }
+
+  if (S.casting && nativeCast) { // play on the Google speaker instead of the phone
+    setStatus('Sending to ' + (S.castDevice || 'speaker') + '…');
+    let ok = false;
+    try {
+      const isHls = st.hls || /\.m3u8(\?|$)/i.test(url);
+      const r = await nativeCast.castMedia({
+        url, title: st.name, subtitle: [st.region !== 'All' && st.region !== 'Other' ? st.region : '', st.country || country().name].filter(Boolean).join(', '),
+        image: st.favicon || '', contentType: isHls ? 'application/x-mpegurl' : /aac/i.test(st.codec || '') ? 'audio/aac' : 'audio/mpeg'
+      });
+      ok = !!(r && r.ok);
+    } catch (e) { ok = false; }
+    if (token !== playToken) return null;
+    if (ok) { setStatus('▶ Playing on ' + (S.castDevice || 'speaker')); addRecent(st); pingClick(st); updateMediaSession(st); nativeStart(st); return true; }
+    setStatus('This station won\'t play on ' + (S.castDevice || 'the speaker') + ' — try another', true);
+    return false;
+  }
 
   try {
     const isHls = st.hls || /\.m3u8(\?|$)/i.test(url);
@@ -492,6 +510,7 @@ function powerOn() {
 }
 function powerOff() {
   if (!S.power) return;
+  if (S.casting && nativeCast) nativeCast.stop().catch(() => { });
   S.power = false; document.body.classList.add('off');
   playToken++; clearTimeout(tuneTimer); stopStream(); stopScan();
   staticTo(0);
@@ -502,6 +521,7 @@ function powerOff() {
 }
 function setVolume(v) {
   S.volume = clamp(v, 0, 1); store.set('volume', S.volume);
+  if (S.casting) castVolumeSoon();
   if (S.volume < 0.04) { powerOff(); return; }
   if (!S.power) powerOn();
   setAudioVolume(S.volume);
@@ -1304,6 +1324,64 @@ $('btnBackupShare').addEventListener('click', async () => {
   } catch (e) { }
 });
 
+/* ---------------- casting to Google Home / Nest speakers & Chromecast ---------------- */
+let nativeCast = null, castVolT = null;
+S.casting = false; S.castDevice = '';
+function castVolumeSoon() {
+  clearTimeout(castVolT);
+  castVolT = setTimeout(() => { if (S.casting && nativeCast) nativeCast.setVolume({ volume: S.volume }).catch(() => { }); }, 150);
+}
+function updateCastBtn() {
+  $('btnCast').classList.toggle('on', S.casting);
+  $('castLabel').textContent = S.casting ? (S.castDevice || 'Casting') : 'Cast';
+}
+function onCastState(st) {
+  const was = S.casting;
+  S.casting = !!(st && st.connected); S.castDevice = (st && st.device) || '';
+  updateCastBtn();
+  if (S.casting && !was) {
+    playToken++; clearTimeout(tuneTimer); stopStream(); staticTo(0);
+    toast('Connected to ' + (S.castDevice || 'speaker'));
+    if (S.power && S.current) playStream(S.current);
+    else setStatus('Connected to ' + (S.castDevice || 'speaker') + ' — turn VOLUME to play');
+  } else if (!S.casting && was) {
+    toast('Stopped casting — playing on the phone');
+    if (S.power && S.current) tuneTo(S.current, true);
+  }
+}
+function setupCast() {
+  if (IS_NATIVE) {
+    const C = window.Capacitor;
+    try { nativeCast = (C.registerPlugin && C.registerPlugin('RadioCast')) || (C.Plugins && C.Plugins.RadioCast) || null; } catch (e) { nativeCast = null; }
+    if (!nativeCast && C.nativePromise) {
+      const call = (m, o) => C.nativePromise('RadioCast', m, o || {});
+      nativeCast = {
+        pick: () => call('pick'), castMedia: o => call('castMedia', o), stop: () => call('stop'), end: () => call('end'),
+        setVolume: o => call('setVolume', o), getState: () => call('getState'),
+        addListener: (ev, cb) => C.nativeCallback && C.nativeCallback('RadioCast', 'addListener', { eventName: ev }, cb)
+      };
+    }
+    try { nativeCast && nativeCast.addListener('castState', onCastState); } catch (e) { }
+    try { nativeCast && nativeCast.getState().then(onCastState).catch(() => { }); } catch (e) { }
+  } else if (audio.remote) {
+    audio.remote.onconnect = () => { S.castDevice = 'speaker'; $('btnCast').classList.add('on'); $('castLabel').textContent = 'Casting'; };
+    audio.remote.ondisconnect = () => { $('btnCast').classList.remove('on'); $('castLabel').textContent = 'Cast'; };
+  }
+}
+async function castClick() {
+  if (IS_NATIVE && nativeCast) {
+    try { await nativeCast.pick(); } catch (e) { toast((e && e.message) || 'Casting is not available on this phone', 3500); }
+    return;
+  }
+  if (IS_IOS) { toast('iPhone web apps cannot cast to Google speakers. Use the Android app.', 4000); return; }
+  if (audio.remote && audio.currentSrc && !hls) {
+    try { await audio.remote.prompt(); } catch (e) { toast('No speaker selected (or this station cannot be cast from the web app)', 3500); }
+    return;
+  }
+  toast(S.power ? 'This station cannot be cast from the web app — use the Android app' : 'Switch the radio on first, then tap Cast', 3500);
+}
+$('btnCast').addEventListener('click', castClick);
+
 /* ---------------- buttons ---------------- */
 $('btnSearch').addEventListener('click', () => { ensureAudioCtx(); openSheet('searchSheet'); $('searchInput').value = ''; runSearch(''); setTimeout(() => $('searchInput').focus(), 60); });
 $('btnScan').addEventListener('click', () => { ensureAudioCtx(); S.scanning ? stopScan() : startScan(); });
@@ -1322,7 +1400,7 @@ $('btnSettings').addEventListener('click', () => openSheet('settingsSheet'));
 /* ---------------- boot ---------------- */
 async function boot() {
   $('ver').textContent = APP_VERSION + (IS_NATIVE ? ' (app)' : '');
-  buildScale(); applySettings(); setupKnobs(); setupMediaSession(); setupNative();
+  buildScale(); applySettings(); setupKnobs(); setupMediaSession(); setupNative(); setupCast();
   setNeedle(0.02);
   const spot = store.get('spot', null);
   await loadCurated();

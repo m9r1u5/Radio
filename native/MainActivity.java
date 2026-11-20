@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RadioServicePlugin.class);
+        registerPlugin(CastPlugin.class);
         super.onCreate(savedInstanceState);
         // Android 13+: allow the "now playing" notification with its Stop button
         if (Build.VERSION.SDK_INT >= 33

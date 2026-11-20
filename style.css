@@ -276,8 +276,14 @@ textarea.backup { flex: 1; width: 100%; margin: 0 0 10px; padding: 10px; backgro
 
 
 /* ---------- SKIN SWITCH ---------- */
+.topbar {
+  position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 10px; right: 10px; z-index: 5;
+  display: flex; justify-content: space-between; pointer-events: none;
+}
+.topbar button { pointer-events: auto; }
+.cast-btn { display: inline-flex; align-items: center; gap: 6px; }
+.cast-btn.on { background: linear-gradient(180deg, #ffe7a8, #e0a93a); color: #222; border-color: #b07a1c; }
 .skin-switch {
-  position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 10px; z-index: 5;
   background: rgba(0,0,0,.45); color: #ddd; border: 1px solid #555; border-radius: 16px;
   font-size: 12px; padding: 6px 10px; letter-spacing: .5px;
 }
@@ -411,5 +417,5 @@ body.skin-car:not(.off) .car-lamp { background: #ff3b2f; box-shadow: 0 0 6px #ff
   .presets button small { display: none; }
   .car .car-find { width: 58px; height: 58px; }
   .car .car-find small { font-size: 6px; }
-  .skin-switch { top: auto; bottom: calc(env(safe-area-inset-bottom) + 10px); }
+  .topbar { top: auto; bottom: calc(env(safe-area-inset-bottom) + 10px); right: auto; gap: 8px; }
 }

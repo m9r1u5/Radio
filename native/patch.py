@@ -8,7 +8,7 @@ import os, re, shutil, glob
 PKG = 'com/m9r1u5/retroradio'
 java_dir = os.path.join('android/app/src/main/java', PKG)
 os.makedirs(java_dir, exist_ok=True)
-for f in ('MainActivity.java', 'RadioService.java', 'RadioServicePlugin.java', 'IcyReader.java'):
+for f in ('MainActivity.java', 'RadioService.java', 'RadioServicePlugin.java', 'IcyReader.java', 'CastPlugin.java', 'CastOptionsProvider.java'):
     shutil.copy(os.path.join('native', f), os.path.join(java_dir, f))
 
 mf = 'android/app/src/main/AndroidManifest.xml'
@@ -24,6 +24,9 @@ if 'usesCleartextTraffic' not in x:
     x = x.replace('<application', '<application\n        android:usesCleartextTraffic="true"', 1)
 service = ('        <service android:name=".RadioService" android:exported="false" '
            'android:foregroundServiceType="mediaPlayback" />\n')
+if 'OPTIONS_PROVIDER_CLASS_NAME' not in x:
+    service += ('        <meta-data android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME" '
+                'android:value="com.m9r1u5.retroradio.CastOptionsProvider" />\n')
 if '.RadioService' not in x:
     x = x.replace('</application>', service + '    </application>', 1)
 open(mf, 'w', encoding='utf-8').write(x)
@@ -66,6 +69,14 @@ if os.path.exists('retro.keystore'):
     print('signing config added')
 else:
     print('no retro.keystore - using a random debug key')
+
+# Google Cast libraries (for Google Home / Nest speakers)
+gradle = 'android/app/build.gradle'
+g = open(gradle, encoding='utf-8').read()
+if 'play-services-cast-framework' not in g:
+    g = re.sub(r'(dependencies\s*\{)', r"\1\n    implementation 'com.google.android.gms:play-services-cast-framework:21.4.0'\n    implementation 'androidx.mediarouter:mediarouter:1.6.0'", g, count=1)
+    open(gradle, 'w', encoding='utf-8').write(g)
+    print('cast dependencies added')
 
 # launcher icons
 try:
