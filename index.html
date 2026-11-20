@@ -41,7 +41,7 @@
     <div class="strip">
       <div class="where" id="where">SOUTH AFRICA · GAUTENG</div>
       <div class="station" id="stationName">— OFF —</div>
-      <div class="status" id="status">Turn VOLUME to switch on</div>
+      <div class="status" id="status">Press POWER to switch on</div>
     </div>
 
     <!-- BODY -->
@@ -68,11 +68,14 @@
         <div class="kwrap mid">
           <label>VOLUME</label>
           <div class="knob" id="knobVol"><span class="mark"></span></div>
-          <div class="vol-labels"><span>OFF<br>POWER</span><span>MAX</span></div>
+          <div class="vol-labels"><span>MIN</span><span>MAX</span></div>
         </div>
       </div>
     </div>
-    <div class="led" id="led"></div>
+    <div class="case-foot">
+      <span class="bands-label">FM &middot; AM &middot; SW &nbsp;3-BAND</span>
+      <button class="power-btn" id="btnPower" aria-label="Power on/off"><i class="pled"></i><b>&#9211;</b> POWER</button>
+    </div>
   </div>
 
   <div class="topbar">
@@ -109,9 +112,12 @@
     <div class="car-labels"><span>VOLUME &middot; <em>ring:</em> COUNTRY</span><span>TUNING &middot; <em>ring:</em> REGION</span></div>
     <div class="car-info">
       <div class="where" id="where2">SOUTH AFRICA · GAUTENG</div>
-      <div class="status" id="status2">Turn VOLUME to switch on</div>
+      <div class="status" id="status2">Press POWER to switch on</div>
     </div>
-    <div class="presets" id="presets"></div>
+    <div class="preset-row">
+      <button class="car-power" id="btnPower2" aria-label="Power on/off"><b>&#9211;</b><small>POWER</small><i class="pled"></i></button>
+      <div class="presets" id="presets"></div>
+    </div>
     <button class="find car-find" id="btnFind2" aria-label="Find song"><span class="ring"></span><b>&#9835;</b><small>FIND SONG</small></button>
   </div>
 

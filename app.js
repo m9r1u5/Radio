@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -514,10 +514,19 @@ function powerOff() {
   S.power = false; document.body.classList.add('off');
   playToken++; clearTimeout(tuneTimer); stopStream(); stopScan();
   staticTo(0);
-  setStatus('Turn VOLUME to switch on');
+  setStatus('Press POWER to switch on');
   if (ac) setTimeout(() => { if (!S.power && ac) ac.suspend().catch(() => { }); }, 300);
   nativeStop();
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+}
+// POWER buttons: switch on at the last volume, switch off without moving the volume knob
+function togglePower() {
+  vibrate(15); ensureAudioCtx();
+  if (S.power) { powerOff(); return; }
+  if (S.volume < 0.05) { S.volume = 0.5; store.set('volume', S.volume); }
+  knobs.vol.setAngle(volToAngle(S.volume));
+  setAudioVolume(S.volume);
+  powerOn();
 }
 function setVolume(v) {
   S.volume = clamp(v, 0, 1); store.set('volume', S.volume);
@@ -614,7 +623,7 @@ function setupKnobs() {
   knobs.region = pairKnobs(twin.r1, twin.r2);
   knobs.tune = pairKnobs(twin.t1, twin.t2);
   knobs.vol = pairKnobs(twin.v1, twin.v2);
-  knobs.vol.setAngle(VOL_MIN); // radio starts switched off
+  knobs.vol.setAngle(volToAngle(S.volume)); // radio starts switched off, knob at the last volume
 }
 
 /* ---------------- sheets ---------------- */
@@ -868,7 +877,7 @@ $('setSleep').addEventListener('change', e => {
   const min = +e.target.value; clearTimeout(sleepT); clearInterval(sleepIv); sleepAt = 0; $('sleepLeft').textContent = '';
   if (!min) return;
   sleepAt = Date.now() + min * 60000;
-  sleepT = setTimeout(() => { knobs.vol.setAngle(VOL_MIN); powerOff(); $('setSleep').value = '0'; $('sleepLeft').textContent = ''; clearInterval(sleepIv); toast('Sleep timer — radio off'); }, min * 60000);
+  sleepT = setTimeout(() => { powerOff(); $('setSleep').value = '0'; $('sleepLeft').textContent = ''; clearInterval(sleepIv); toast('Sleep timer — radio off'); }, min * 60000);
   const show = () => { $('sleepLeft').textContent = 'Switching off in ' + Math.ceil((sleepAt - Date.now()) / 60000) + ' min'; };
   show(); sleepIv = setInterval(show, 20000);
   toast('Sleep timer: ' + min + ' min');
@@ -920,8 +929,8 @@ function setupMediaSession() {
   if (!('mediaSession' in navigator)) return;
   const h = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch (e) { } };
   h('play', () => { if (!S.power) { knobs.vol.setAngle(volToAngle(Math.max(S.volume, .5))); setVolume(Math.max(S.volume, .5)); } else tuneTo(S.current, true); });
-  h('pause', () => { knobs.vol.setAngle(VOL_MIN); powerOff(); });
-  h('stop', () => { knobs.vol.setAngle(VOL_MIN); powerOff(); });
+  h('pause', () => { powerOff(); });
+  h('stop', () => { powerOff(); });
   h('nexttrack', () => { knobs.tune.turn(1); tune(1); });
   h('previoustrack', () => { knobs.tune.turn(-1); tune(-1); });
 }
@@ -943,7 +952,7 @@ function setupNative() {
       addListener: (ev, cb) => C.nativeCallback && C.nativeCallback('RadioService', 'addListener', { eventName: ev }, cb)
     };
   }
-  try { nativeRadio && nativeRadio.addListener && nativeRadio.addListener('stopPressed', () => { knobs.vol.setAngle(VOL_MIN); powerOff(); }); } catch (e) { }
+  try { nativeRadio && nativeRadio.addListener && nativeRadio.addListener('stopPressed', () => { powerOff(); }); } catch (e) { }
 }
 function nativeStart(st) { try { nativeRadio && nativeRadio.start({ title: st.name, text: [st.region, st.country || country().name].filter(r => r && r !== 'All').join(' · ') }); } catch (e) { } }
 function nativeStop() { try { nativeRadio && nativeRadio.stop(); } catch (e) { } }
@@ -1343,7 +1352,7 @@ function onCastState(st) {
     playToken++; clearTimeout(tuneTimer); stopStream(); staticTo(0);
     toast('Connected to ' + (S.castDevice || 'speaker'));
     if (S.power && S.current) playStream(S.current);
-    else setStatus('Connected to ' + (S.castDevice || 'speaker') + ' — turn VOLUME to play');
+    else setStatus('Connected to ' + (S.castDevice || 'speaker') + ' — press POWER to play');
   } else if (!S.casting && was) {
     toast('Stopped casting — playing on the phone');
     if (S.power && S.current) tuneTo(S.current, true);
@@ -1391,6 +1400,8 @@ $('btnRecent').addEventListener('click', showRecent);
 $('btnSongs').addEventListener('click', showSongs);
 $('btnFind').addEventListener('click', onFind);
 $('btnFind2').addEventListener('click', onFind);
+$('btnPower').addEventListener('click', togglePower);
+$('btnPower2').addEventListener('click', togglePower);
 $('setFind').addEventListener('change', e => { S.settings.findMode = e.target.value; saveSettings(); });
 $('btnProbe').addEventListener('click', runProbe);
 $('btnProbeAgain').addEventListener('click', runProbe);
@@ -1413,7 +1424,7 @@ async function boot() {
     const i = S.list.findIndex(s => s.id === spot.station.id || s.name === spot.station.name);
     if (i >= 0) { S.ti = i; tuneTo(S.list[i]); }
   }
-  setStatus('Turn VOLUME to switch on');
+  setStatus('Press POWER to switch on');
   if ('serviceWorker' in navigator && !IS_NATIVE && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => { });
   }
