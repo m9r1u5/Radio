@@ -75,6 +75,40 @@
     <div class="led" id="led"></div>
   </div>
 
+  <button class="skin-switch" id="btnSkin" aria-label="Switch radio style">&#8644; <span id="skinLabel">Car radio</span></button>
+
+  <!-- CAR RADIO SCREEN -->
+  <div class="car" id="carRadio">
+    <div class="car-unit">
+      <div class="cknob" id="cknobLeft">
+        <div class="ring" id="ringCountry"><span class="dot"></span></div>
+        <div class="inner" id="knobVol2"><span class="mark"></span></div>
+      </div>
+      <div class="car-dial" id="dial2" title="Long-press to save as favourite">
+        <div class="car-glass">
+          <div class="car-scale">
+            <div class="car-row" id="carRow"></div>
+            <div class="car-ticks" id="carTicks"></div>
+            <div class="needle" id="needle2"></div>
+          </div>
+          <div class="car-station" id="station2">— OFF —</div>
+          <div class="car-brand"><span>&#9673; RR</span><b>RETRO</b><span>CAR <i class="car-lamp"></i></span></div>
+        </div>
+      </div>
+      <div class="cknob" id="cknobRight">
+        <div class="ring" id="ringRegion"><span class="dot"></span></div>
+        <div class="inner" id="knobTune2"><span class="mark"></span></div>
+      </div>
+    </div>
+    <div class="car-labels"><span>VOLUME &middot; <em>ring:</em> COUNTRY</span><span>TUNING &middot; <em>ring:</em> REGION</span></div>
+    <div class="car-info">
+      <div class="where" id="where2">SOUTH AFRICA · GAUTENG</div>
+      <div class="status" id="status2">Turn VOLUME to switch on</div>
+    </div>
+    <div class="presets" id="presets"></div>
+    <button class="find car-find" id="btnFind2" aria-label="Find song"><span class="ring"></span><b>&#9835;</b><small>FIND SONG</small></button>
+  </div>
+
   <nav class="buttons">
     <button id="btnSearch" aria-label="Search">&#128269;<span>Search</span></button>
     <button id="btnScan" aria-label="Scan">&#9654;&#9654;<span>Scan</span></button>
@@ -161,6 +195,9 @@
     </label>
     <label class="row">FIND SONG uses
       <select id="setFind"><option value="shazam">Shazam app</option><option value="station">Station's song info</option></select>
+    </label>
+    <label class="row">Radio style
+      <select id="setSkin"><option value="portable">Portable radio</option><option value="car">Car radio</option></select>
     </label>
     <label class="row">Dial light
       <select id="setLight"><option value="amber">Warm amber</option><option value="green">Green</option></select>

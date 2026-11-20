@@ -15,6 +15,12 @@ World radio stations on an old-school analog radio. Inspired by Radio Garden.
 
 Drag a knob in a circle to turn it, or tap its right side for one step forward and its left side for one step back.
 
+## Two radio styles
+
+Tap **⇄** (top-left) or go to **Setup › Radio style** to switch between the **portable radio** and the **car radio**.
+On the car radio the left knob is VOLUME (its outer ring = COUNTRY) and the right knob is TUNING (outer ring = REGION).
+The five chrome buttons are presets: hold one to save the current station, tap it to tune in.
+
 ## Install
 
 **Android (APK)**: open the latest release and download `RetroRadio.apk`:

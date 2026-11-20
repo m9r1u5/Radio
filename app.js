@@ -3,7 +3,7 @@
    Curated South African list: stations-za.json */
 'use strict';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const PAGES_URL = 'https://m9r1u5.github.io/Radio/';
 const APK_URL = 'https://github.com/m9r1u5/Radio/releases/latest/download/RetroRadio.apk';
 const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -133,6 +133,10 @@ function buildScale() {
   let ticks = '';
   for (let f = 88; f <= 108; f += 1) ticks += `<i style="left:${posToPct(fmPos(f))}%;height:${f % 4 === 0 ? 8 : 4}px"></i>`;
   $('ticks').innerHTML = ticks;
+  $('carRow').innerHTML = '<span class="fm" style="left:-1%">FM</span>' + [88, 92, 96, 100, 104, 108].map(v => `<span style="left:${(8 + fmPos(v) * 84).toFixed(2)}%">${v}</span>`).join('') + '<span class="fm" style="left:101%;font-size:8px">MHz</span>';
+  let ct = '';
+  for (let f = 88; f <= 108; f += 1) ct += `<i style="left:${(8 + fmPos(f) * 84).toFixed(2)}%;height:${f % 4 === 0 ? 7 : 3}px"></i>`;
+  $('carTicks').innerHTML = ct;
 }
 const fmPos = f => clamp((f - FM_MIN) / (FM_MAX - FM_MIN), 0, 1);
 const posToPct = p => (p * 92 + 4).toFixed(2);
@@ -143,7 +147,7 @@ function layoutDial(list) {
   list.sort((a, b) => a._pos - b._pos || a.name.localeCompare(b.name));
   return list;
 }
-function setNeedle(pos) { $('needle').style.left = posToPct(pos == null ? 0.02 : pos) + '%'; }
+function setNeedle(pos) { const p = pos == null ? 0.02 : pos; $('needle').style.left = posToPct(p) + '%'; $('needle2').style.left = (8 + p * 84).toFixed(2) + '%'; }
 
 /* ---------------- countries & stations ---------------- */
 async function loadCurated() {
@@ -241,16 +245,17 @@ function markAlive(st) { if (dead[st.id]) { delete dead[st.id]; store.set('dead'
 function country() { return S.countries[S.ci] || { code: 'ZA', name: 'South Africa' }; }
 function updateWhere() {
   const r = S.regions[S.ri];
-  $('where').textContent = country().name + (r ? ' · ' + r : '');
+  $('where').textContent = $('where2').textContent = country().name + (r ? ' · ' + r : '');
 }
 function showStation(st) {
   const fl = st ? freqLabel(st) : '';
   const showF = fl && !digits(st.name).includes(digits(fl).replace(/0$/, ''));
-  $('stationName').textContent = st ? st.name + (showF ? '  ' + fl : '') : '— no stations here —';
+  $('stationName').textContent = $('station2').textContent = st ? st.name + (showF ? '  ' + fl : '') : '— no stations here —';
+  updatePresets();
   setNeedle(st ? st._pos : null);
   updateFavBtn();
 }
-function setStatus(txt, bad) { const el = $('status'); el.textContent = txt || ''; el.classList.toggle('bad', !!bad); }
+function setStatus(txt, bad) { ['status', 'status2'].forEach(id => { const el = $(id); el.textContent = txt || ''; el.classList.toggle('bad', !!bad); }); }
 
 /* ---------------- static noise (Web Audio) ---------------- */
 let ac = null, noiseGain = null;
@@ -452,7 +457,7 @@ function countryStep(dir) {
   if (!S.countries.length) return;
   S.ci = (S.ci + dir + S.countries.length) % S.countries.length;
   S.regions = []; updateWhere();
-  $('stationName').textContent = country().name.toUpperCase();
+  $('stationName').textContent = $('station2').textContent = country().name.toUpperCase();
   setStatus('Loading stations…');
   playToken++; stopStream(); if (S.power) staticTo(0.5);
   clearTimeout(countryTimer);
@@ -570,13 +575,25 @@ function makeKnob(el, { onStep, onLong, stepDeg = 30, continuous = null }) {
 const VOL_MIN = -140, VOL_MAX = 140;
 const volToAngle = v => VOL_MIN + v * (VOL_MAX - VOL_MIN);
 const knobs = {};
+// each control exists on both screens (portable + car); turning one moves its twin
+function pairKnobs(x, y) { return { turn(n) { x.turn(n); y.turn(n); }, setAngle(v) { x.setAngle(v); y.setAngle(v); } }; }
 function setupKnobs() {
-  knobs.country = makeKnob($('knobCountry'), { stepDeg: 24, onStep: countryStep, onLong: pickCountry });
-  knobs.region = makeKnob($('knobRegion'), { stepDeg: 30, onStep: region, onLong: pickRegion });
-  knobs.tune = makeKnob($('knobTune'), { stepDeg: 22, onStep: d => { stopScan(); tune(d); } });
-  knobs.vol = makeKnob($('knobVol'), {
-    continuous: { min: VOL_MIN, max: VOL_MAX, onAngle: a => setVolume((a - VOL_MIN) / (VOL_MAX - VOL_MIN)) }
-  });
+  const tuneStep = d => { stopScan(); tune(d); };
+  const twin = {};
+  const step = (key, fn, other) => d => { twin[other].turn(d); fn(d); };
+  twin.c1 = makeKnob($('knobCountry'), { stepDeg: 24, onStep: step('c', countryStep, 'c2'), onLong: pickCountry });
+  twin.c2 = makeKnob($('ringCountry'), { stepDeg: 24, onStep: step('c', countryStep, 'c1'), onLong: pickCountry });
+  twin.r1 = makeKnob($('knobRegion'), { stepDeg: 30, onStep: step('r', region, 'r2'), onLong: pickRegion });
+  twin.r2 = makeKnob($('ringRegion'), { stepDeg: 30, onStep: step('r', region, 'r1'), onLong: pickRegion });
+  twin.t1 = makeKnob($('knobTune'), { stepDeg: 22, onStep: step('t', tuneStep, 't2') });
+  twin.t2 = makeKnob($('knobTune2'), { stepDeg: 22, onStep: step('t', tuneStep, 't1') });
+  const vol = (me, other) => makeKnob($(me), { continuous: { min: VOL_MIN, max: VOL_MAX, onAngle: a => { twin[other].setAngle(a); setVolume((a - VOL_MIN) / (VOL_MAX - VOL_MIN)); } } });
+  twin.v1 = vol('knobVol', 'v2');
+  twin.v2 = vol('knobVol2', 'v1');
+  knobs.country = pairKnobs(twin.c1, twin.c2);
+  knobs.region = pairKnobs(twin.r1, twin.r2);
+  knobs.tune = pairKnobs(twin.t1, twin.t2);
+  knobs.vol = pairKnobs(twin.v1, twin.v2);
   knobs.vol.setAngle(VOL_MIN); // radio starts switched off
 }
 
@@ -764,15 +781,55 @@ function showFavs() {
 function showRecent() { openList('Recently played', store.get('recent', []), { render: st => stationLi(st), onPick: st => goToStation(st) }); }
 
 // long-press the dial to save a favourite
-(() => {
+['dial', 'dial2'].forEach(id => {
   let t = null;
-  const dial = $('dial');
+  const dial = $(id);
   dial.addEventListener('pointerdown', () => { t = setTimeout(() => { t = null; toggleFav(); }, 650); });
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => dial.addEventListener(ev, () => { clearTimeout(t); t = null; }));
   dial.addEventListener('contextmenu', e => e.preventDefault());
-})();
+});
 $('where').addEventListener('click', pickCountry);
+$('where2').addEventListener('click', pickCountry);
 $('stationName').addEventListener('click', pickRegion);
+$('station2').addEventListener('click', pickRegion);
+
+/* ---------------- car radio: preset buttons 1-5 ---------------- */
+// tap = tune to the station saved on that button; hold = save the current station on it
+function updatePresets() {
+  const box = $('presets'); if (!box) return;
+  const pr = store.get('presets', []);
+  if (!box.children.length) {
+    for (let i = 0; i < 5; i++) {
+      const b = document.createElement('button'); b.innerHTML = `<b>${i + 1}</b><small></small>`;
+      let t = null, held = false;
+      b.addEventListener('pointerdown', () => { held = false; t = setTimeout(() => { held = true; savePreset(i); }, 650); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { clearTimeout(t); }));
+      b.addEventListener('click', () => { if (held) return; const p = store.get('presets', [])[i]; if (p) goToStation(p); else toast(`Button ${i + 1} is empty — hold it to save the current station`, 3000); });
+      b.addEventListener('contextmenu', e => e.preventDefault());
+      box.appendChild(b);
+    }
+  }
+  [...box.children].forEach((b, i) => {
+    const p = pr[i];
+    b.querySelector('small').textContent = p ? p.name : 'hold to save';
+    b.classList.toggle('on', !!(p && S.current && (p.id === S.current.id || norm(p.name) === norm(S.current.name))));
+  });
+}
+function savePreset(i) {
+  if (!S.current) { toast('Tune to a station first'); return; }
+  const pr = store.get('presets', []); pr[i] = keep(S.current); store.set('presets', pr);
+  vibrate([15, 40, 15]); toast(`Saved ${S.current.name} on button ${i + 1}`); updatePresets();
+}
+
+/* ---------------- radio style (portable / car) ---------------- */
+function applySkin() {
+  const car = S.settings.skin === 'car';
+  document.body.classList.toggle('skin-car', car);
+  $('skinLabel').textContent = car ? 'Portable radio' : 'Car radio';
+  $('setSkin').value = car ? 'car' : 'portable';
+}
+$('btnSkin').addEventListener('click', () => { S.settings.skin = S.settings.skin === 'car' ? 'portable' : 'car'; saveSettings(); vibrate(10); });
+$('setSkin').addEventListener('change', e => { S.settings.skin = e.target.value; saveSettings(); });
 
 /* ---------------- settings ---------------- */
 let sleepAt = 0, sleepT = null, sleepIv = null;
@@ -782,6 +839,7 @@ function applySettings() {
   $('setStatic').checked = !!S.settings.static;
   $('setLight').value = S.settings.light;
   $('setFind').value = S.settings.findMode === 'station' ? 'station' : 'shazam';
+  applySkin();
 }
 function saveSettings() { store.set('settings', S.settings); applySettings(); }
 $('setStatic').addEventListener('change', e => { S.settings.static = e.target.checked; saveSettings(); if (!e.target.checked) staticTo(0); });
@@ -1070,7 +1128,7 @@ function saveSong(song) {
 async function openShazam() {
   if (!S.power || !S.current) { toast('Switch the radio on and tune to a station first'); return; }
   vibrate(20);
-  const btn = $('btnFind'); btn.classList.add('listening'); setTimeout(() => btn.classList.remove('listening'), 2500);
+  const btns = document.querySelectorAll('.find'); btns.forEach(b => b.classList.add('listening')); setTimeout(() => btns.forEach(b => b.classList.remove('listening')), 2500);
   if (S.volume < 0.35) toast('Turn the volume up a bit so Shazam can hear the song', 3500);
   if (IS_NATIVE && nativeRadio && nativeRadio.openShazam) {
     try {
@@ -1097,7 +1155,8 @@ async function findSong() {
   if (!S.power || !st) { toast('Switch the radio on and tune to a station first'); return; }
   if (!navigator.onLine) { toast('No internet connection'); return; }
   finding = true; vibrate(20);
-  const btn = $('btnFind'); btn.classList.add('listening');
+  const btn = { classList: { remove: () => document.querySelectorAll('.find').forEach(b => b.classList.remove('listening')) } };
+  document.querySelectorAll('.find').forEach(b => b.classList.add('listening'));
   const prevStatus = $('status').textContent;
   setStatus('♫ Listening…');
   try {
@@ -1192,7 +1251,7 @@ document.addEventListener('click', e => { if (e.target.closest('#songSheet [data
 /* ---------------- backup & restore ---------------- */
 let backupMode = 'backup';
 function makeBackup() {
-  return JSON.stringify({ app: 'RetroRadio', v: 1, at: new Date().toISOString(), favs: store.get('favs', []), songs: store.get('songs', []), recent: store.get('recent', []), settings: S.settings });
+  return JSON.stringify({ app: 'RetroRadio', v: 1, at: new Date().toISOString(), favs: store.get('favs', []), songs: store.get('songs', []), recent: store.get('recent', []), presets: store.get('presets', []), settings: S.settings });
 }
 function openBackup() {
   backupMode = 'backup';
@@ -1220,6 +1279,8 @@ function doRestore(text) {
   const songs = mergeById(store.get('songs', []), d.songs || []).sort((x, y) => (y.at || 0) - (x.at || 0));
   store.set('favs', favs); store.set('songs', songs.slice(0, 300));
   if (!store.get('recent', []).length && d.recent) store.set('recent', d.recent);
+  if (d.presets && !store.get('presets', []).some(Boolean)) store.set('presets', d.presets);
+  updatePresets();
   updateFavBtn(); closeSheets();
   toast(`Restored: ${favs.length} favourite${favs.length === 1 ? "" : "s"}, ${songs.length} song${songs.length === 1 ? "" : "s"}`, 3000);
 }
@@ -1251,6 +1312,7 @@ $('btnFavs').addEventListener('click', showFavs);
 $('btnRecent').addEventListener('click', showRecent);
 $('btnSongs').addEventListener('click', showSongs);
 $('btnFind').addEventListener('click', onFind);
+$('btnFind2').addEventListener('click', onFind);
 $('setFind').addEventListener('change', e => { S.settings.findMode = e.target.value; saveSettings(); });
 $('btnProbe').addEventListener('click', runProbe);
 $('btnProbeAgain').addEventListener('click', runProbe);
